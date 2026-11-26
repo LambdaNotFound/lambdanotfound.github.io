@@ -6,7 +6,7 @@ Personal site, published by `.github/workflows/deploy.yml` on every push to `mai
 
 https://lambdanotfound.github.io/practice/ shows the day's practice plan, a timer and grade buttons for each problem, and a board of every problem shaded by how well it should still be remembered.
 
-There is no backend. The plan is picked once a day, from 3 PM Pacific, by `spaced_repetition/sr.py` in [GoCode](https://github.com/LambdaNotFound/GoCode) and recorded in its `state.json`; the page reads that file and `problems.json` straight from GoCode on each visit (GitHub caches them for about five minutes). Logging opens a prefilled GitHub issue titled "Practice log YYYY-MM-DD" in GoCode; once you submit it, GoCode's `log-solve` workflow logs the grades, replies and closes the issue. Timers and grades not yet sent are kept in this browser's localStorage.
+There is no backend. The plan is picked once a day, from 3 PM Pacific, by `spaced_repetition/sr.py` in [GoCode](https://github.com/LambdaNotFound/GoCode) and recorded in its `state.json`; the page reads that file and `problems.json` straight from GoCode on each visit (GitHub caches them for about five minutes). Logging opens a prefilled GitHub issue titled "Practice log YYYY-MM-DD" in GoCode; once you submit it, GoCode's `log-solve` workflow logs the grades, replies and closes the issue. With a GitHub token saved under "Set up one-tap logging" (fine-grained, the GoCode repository only, Issues: Read and write), "Log now" creates that same issue through GitHub's API, with no form to submit. Timers, grades not yet sent and the token are kept in this browser's localStorage.
 
 ```bash
 cd practice

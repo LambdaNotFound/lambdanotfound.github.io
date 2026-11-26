@@ -143,6 +143,18 @@ header .lead { max-width: 65ch; }
   padding-block: 10px;
 }
 
+.slip .token { display: grid; gap: 8px; }
+.slip input[type="password"] {
+  width: 100%;
+  font: 400 14px/1 var(--num);
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 9px 10px;
+  min-height: 36px;
+}
+
 .board { display: grid; gap: 10px; }
 .cat { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 10px; align-items: start; }
 .cat > span { font-size: 14px; color: var(--soft); padding-top: 5px; }

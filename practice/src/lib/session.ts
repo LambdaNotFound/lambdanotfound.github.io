@@ -93,3 +93,25 @@ export function saveSession(s: Session): void {
     // Private windows and blocked storage: the page still works, it just forgets.
   }
 }
+
+// A GitHub token for one-tap logging, if the viewer saved one. Like the
+// session it stays in this browser only, so anyone using this browser can
+// log with it; the setup text says so.
+const TOKEN_KEY = "daily-practice:token";
+
+export function loadToken(): string {
+  try {
+    return localStorage.getItem(TOKEN_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+export function saveToken(token: string): void {
+  try {
+    if (token) localStorage.setItem(TOKEN_KEY, token);
+    else localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    // Blocked storage: the token lasts until the page is closed.
+  }
+}

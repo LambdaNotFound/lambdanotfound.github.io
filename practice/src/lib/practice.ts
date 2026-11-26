@@ -3,7 +3,9 @@
 // The plan itself is picked by sr.py in the GoCode repo, once a day from
 // 3 PM Pacific, and recorded in state.json. This page only reads that file:
 // it shows the latest plan, and logs grades by opening a GitHub issue that
-// GoCode's log-solve workflow turns into `sr.py log` calls.
+// GoCode's log-solve workflow turns into `sr.py log` calls. The issue is
+// either prefilled for the viewer to submit, or, with a token the viewer
+// saved, created straight through GitHub's API.
 
 export const REPO = "LambdaNotFound/GoCode";
 
@@ -41,6 +43,9 @@ export interface LogEntry {
   date: string;
   id: string;
   grade: Grade;
+  // The card and deferral before this log, which `sr.py undo` restores.
+  // Entries logged before 11-25-2026 have none.
+  prev?: { card: Card | null; deferred: unknown };
 }
 
 export interface State {
@@ -129,6 +134,35 @@ export function slipLines(order: string[], grades: Record<string, Grade>): strin
 export function logIssueUrl(date: string, body: string): string {
   const q = (s: string) => encodeURIComponent(s);
   return `https://github.com/${REPO}/issues/new?title=${q(`Practice log ${date}`)}&body=${q(body)}`;
+}
+
+/**
+ * The same log issue, created through GitHub's API with the viewer's token:
+ * one tap instead of a trip to GitHub's form. The issue is opened as the
+ * token's owner, which is what log-solve.yml checks.
+ */
+export function logIssueRequest(date: string, body: string, token: string): { url: string; init: RequestInit } {
+  return {
+    url: `https://api.github.com/repos/${REPO}/issues`,
+    init: {
+      method: "POST",
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ title: `Practice log ${date}`, body }),
+    },
+  };
+}
+
+/** What to tell the viewer when GitHub refuses that request. */
+export function logIssueError(status: number): string {
+  if (status === 401) return "GitHub didn't accept the token. Forget it and save a new one.";
+  if (status === 403 || status === 404) {
+    return "The token can't open issues in GoCode. It needs Issues: Read and write on that repository.";
+  }
+  return `GitHub answered ${status}. Use Log on GitHub instead.`;
 }
 
 // Minutes up to which a solve suggests easy / good / hard; anything longer

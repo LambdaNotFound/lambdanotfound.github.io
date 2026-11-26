@@ -17,6 +17,8 @@ import {
   daysBetween,
   formatDate,
   inkAlpha,
+  logIssueError,
+  logIssueRequest,
   logIssueUrl,
   loggedSince,
   pacificNow,
@@ -33,7 +35,16 @@ import {
   type State,
   type View,
 } from "./lib/practice";
-import { elapsed, emptySession, loadSession, reducer, saveSession, type Action } from "./lib/session";
+import {
+  elapsed,
+  emptySession,
+  loadSession,
+  loadToken,
+  reducer,
+  saveSession,
+  saveToken,
+  type Action,
+} from "./lib/session";
 
 // Coming back to the tab after this long fetches the data again.
 const STALE_MS = 2 * 60_000;
@@ -260,7 +271,7 @@ function Item({ problem: p, card, isNew, logged, sent, grade, seconds, running, 
           </p>
         ) : sent ? (
           <p className="status">
-            Sent as <b className={sent}>{sent}</b>. It shows as logged a few minutes after you submit the issue.
+            Sent as <b className={sent}>{sent}</b>. It shows as logged a few minutes after the issue is submitted.
           </p>
         ) : (
           <div className="row" role="group" aria-label={`Grade ${p.title}`}>
@@ -288,7 +299,34 @@ function Item({ problem: p, card, isNew, logged, sent, grade, seconds, running, 
 
 function Slip({ date, lines, onSend }: { date: string; lines: string[]; onSend: () => void }) {
   const [note, setNote] = useState("");
+  const [token, setToken] = useState(loadToken);
+  const [busy, setBusy] = useState(false);
   const text = lines.join("\n");
+  // With a saved token: create the log issue directly, no GitHub form.
+  const logNow = async () => {
+    if (!text || busy) return;
+    setBusy(true);
+    const { url, init } = logIssueRequest(date, text, token);
+    try {
+      const res = await fetch(url, init);
+      if (!res.ok) {
+        setNote(logIssueError(res.status));
+        return;
+      }
+      const issue = (await res.json()) as { number?: number };
+      onSend();
+      setNote(`Sent as issue #${issue.number ?? "?"}. These show as logged here a few minutes after GitHub runs it.`);
+    } catch {
+      setNote("Couldn't reach GitHub. Use Log on GitHub instead.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const keep = (t: string) => {
+    saveToken(t);
+    setToken(t);
+    setNote(t ? "Token saved in this browser. Log now sends straight to GitHub." : "Token forgotten.");
+  };
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(text);
@@ -301,9 +339,14 @@ function Slip({ date, lines, onSend }: { date: string; lines: string[]; onSend: 
     <aside className="slip" aria-label="Log">
       <h2>Log</h2>
       <pre>{text || "Grade a problem and it appears here."}</pre>
+      {token && (
+        <button className="send" onClick={() => void logNow()} disabled={!text || busy}>
+          {busy ? "Sending…" : "Log now"}
+        </button>
+      )}
       {/* Always the same <a>, so the click that sends it is never on an element React just replaced. */}
       <a
-        className="btn send"
+        className={token ? "btn" : "btn send"}
         href={text ? logIssueUrl(date, text) : undefined}
         aria-disabled={!text}
         target="_blank"
@@ -320,9 +363,73 @@ function Slip({ date, lines, onSend }: { date: string; lines: string[]; onSend: 
         Copy text
       </button>
       <p className="small soft">
-        {note || "Opens a new GitHub issue with these lines filled in. Submit it, and they show as logged here a few minutes later."}
+        {note ||
+          (token
+            ? "Log now creates the issue for you. Log on GitHub opens it for you to check and submit."
+            : "Opens a new GitHub issue with these lines filled in. Submit it, and they show as logged here a few minutes later.")}
       </p>
+      <TokenSetup token={token} onSave={keep} />
     </aside>
+  );
+}
+
+function TokenSetup({ token, onSave }: { token: string; onSave: (token: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState("");
+  if (token) {
+    return (
+      <div className="row small soft">
+        <span>One-tap logging is on in this browser.</span>
+        <button onClick={() => onSave("")}>Forget token</button>
+      </div>
+    );
+  }
+  if (!open) {
+    return (
+      <div className="row">
+        <button onClick={() => setOpen(true)}>Set up one-tap logging</button>
+      </div>
+    );
+  }
+  return (
+    <form
+      className="token"
+      onSubmit={(e) => {
+        e.preventDefault();
+        const t = draft.trim();
+        if (!t) return;
+        onSave(t);
+        setDraft("");
+        setOpen(false);
+      }}
+    >
+      <label htmlFor="token" className="small">
+        GitHub token
+      </label>
+      <input
+        id="token"
+        type="password"
+        autoComplete="off"
+        spellCheck={false}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+      />
+      <p className="small soft">
+        <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener noreferrer">
+          Create a fine-grained token
+        </a>{" "}
+        for the GoCode repository only, with Issues: Read and write. It stays in this browser, and anyone using this
+        browser can log with it.
+      </p>
+      <div className="row">
+        <button type="submit" disabled={!draft.trim()}>
+          Save token
+        </button>
+        <button type="button" onClick={() => setOpen(false)}>
+          Cancel
+        </button>
+      </div>
+    </form>
   );
 }
 

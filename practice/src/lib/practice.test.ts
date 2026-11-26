@@ -4,6 +4,8 @@ import {
   byCategory,
   daysBetween,
   inkAlpha,
+  logIssueError,
+  logIssueRequest,
   logIssueUrl,
   loggedSince,
   pacificNow,
@@ -113,6 +115,22 @@ describe("logging", () => {
     expect(url.searchParams.get("body")).toBe("1 hard\n53 good");
     // %20, not "+": a "+" would reach GitHub as a literal plus in some paths.
     expect(url.search).not.toContain("+");
+  });
+
+  it("creates the same log issue through the API with a token", () => {
+    const { url, init } = logIssueRequest("2026-11-25", "1 hard\n53 good", "tok");
+    expect(url).toBe("https://api.github.com/repos/LambdaNotFound/GoCode/issues");
+    expect(init.method).toBe("POST");
+    expect((init.headers as Record<string, string>).Authorization).toBe("Bearer tok");
+    expect(JSON.parse(init.body as string)).toEqual({ title: "Practice log 2026-11-25", body: "1 hard\n53 good" });
+  });
+
+  it("explains a refused API request", () => {
+    expect(logIssueError(401)).toMatch(/token/);
+    expect(logIssueError(403)).toMatch(/Issues: Read and write/);
+    expect(logIssueError(404)).toMatch(/Issues: Read and write/);
+    expect(logIssueError(502)).toMatch(/502.*Log on GitHub/);
+    for (const s of [401, 403, 502]) expect(logIssueError(s)).not.toMatch(/leetcode/i);
   });
 
   it("suggests a grade from the time spent", () => {
