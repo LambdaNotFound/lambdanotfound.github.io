@@ -19,6 +19,21 @@ async function get(path: string): Promise<Response> {
   return res;
 }
 
+// Solution files for the "Show code" panel, fetched on first use and kept
+// for as long as the page is open. A failed fetch is forgotten, so opening
+// the panel again retries.
+const sources = new Map<string, Promise<string>>();
+
+export function loadSource(path: string): Promise<string> {
+  let text = sources.get(path);
+  if (!text) {
+    text = get(path).then((r) => r.text());
+    text.catch(() => sources.delete(path));
+    sources.set(path, text);
+  }
+  return text;
+}
+
 export async function loadData(): Promise<Loaded> {
   const [problems, state, readme] = await Promise.all([
     get("spaced_repetition/problems.json").then((r) => r.json() as Promise<Problem[]>),

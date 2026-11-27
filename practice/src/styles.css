@@ -124,6 +124,33 @@ header .lead { max-width: 65ch; }
 .status b.good { color: var(--good); }
 .status b.easy { color: var(--easy); }
 
+/* "Show code": the solution from GoCode, highlighted by shiki. Its HTML
+   carries both themes as --shiki-light / --shiki-dark; the page's scheme
+   picks one, and the sheet behind it stays the page's own. */
+.code { display: grid; gap: 8px; min-width: 0; }
+.code .path { color: inherit; overflow-wrap: anywhere; text-underline-offset: 3px; }
+.code .lang { min-height: 30px; padding: 6px 10px; }
+.code .lang[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.code .src { min-width: 0; }
+.code pre.shiki {
+  margin: 0;
+  padding: 12px 14px;
+  background: var(--sheet);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font: 400 13px/1.55 var(--num);
+  tab-size: 4;
+  overflow: auto;
+  max-height: min(32rem, 70vh);
+}
+.code pre.shiki code { font: inherit; }
+.code .shiki span { color: var(--shiki-light); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .code .shiki span { color: var(--shiki-dark); }
+}
+:root[data-theme="dark"] .code .shiki span { color: var(--shiki-dark); }
+
 .slip {
   background: var(--sheet);
   border: 1px solid var(--line);

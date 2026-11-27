@@ -1,6 +1,7 @@
 import {
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useReducer,
   useState,
@@ -8,7 +9,7 @@ import {
   type Dispatch,
   type ReactNode,
 } from "react";
-import { loadData, type Loaded } from "./lib/data";
+import { loadData, loadSource, type Loaded } from "./lib/data";
 import {
   DIFFICULTY_NAME,
   GRADES,
@@ -45,6 +46,14 @@ import {
   saveToken,
   type Action,
 } from "./lib/session";
+import {
+  LANG_NAME,
+  extractSnippet,
+  maskSiteName,
+  parseSourceRef,
+  type SourceRef,
+  type Snippet,
+} from "./lib/snippet";
 
 // Coming back to the tab after this long fetches the data again.
 const STALE_MS = 2 * 60_000;
@@ -171,7 +180,7 @@ function Page({ data, footer }: { data: Loaded; footer: ReactNode }) {
                   grade={session.grades[id]}
                   seconds={elapsed(session, id, now)}
                   running={session.running?.id === id}
-                  solution={solutions.get(byId.get(id)!.slug)?.[0]}
+                  solutions={solutions.get(byId.get(id)!.slug) ?? NONE}
                   today={today}
                   dispatch={dispatch}
                 />
@@ -187,6 +196,8 @@ function Page({ data, footer }: { data: Loaded; footer: ReactNode }) {
     </main>
   );
 }
+
+const NONE: string[] = [];
 
 const count = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
@@ -227,13 +238,16 @@ interface ItemProps {
   grade?: Grade;
   seconds: number;
   running: boolean;
-  solution?: string;
+  solutions: string[];
   today: string;
   dispatch: Dispatch<Action>;
 }
 
-function Item({ problem: p, card, isNew, logged, sent, grade, seconds, running, solution, today, dispatch }: ItemProps) {
+function Item({ problem: p, card, isNew, logged, sent, grade, seconds, running, solutions, today, dispatch }: ItemProps) {
   const open = !logged && !sent;
+  const refs = useMemo(() => solutions.flatMap((link) => parseSourceRef(link) ?? []), [solutions]);
+  const [showCode, setShowCode] = useState(false);
+  const panel = useId();
   const suggestion = open && !grade && !running && seconds >= 60 ? suggestGrade(p.difficulty, seconds / 60) : undefined;
   return (
     <li className="item">
@@ -259,12 +273,18 @@ function Item({ problem: p, card, isNew, logged, sent, grade, seconds, running, 
               </button>
             </>
           )}
-          {solution && (
-            <a className="btn" href={sourceUrl(solution)} target="_blank" rel="noopener noreferrer">
+          {refs.length > 0 && (
+            <button aria-expanded={showCode} aria-controls={panel} onClick={() => setShowCode((v) => !v)}>
+              {showCode ? "Hide code" : "Show code"}
+            </button>
+          )}
+          {solutions[0] && (
+            <a className="btn" href={sourceUrl(solutions[0])} target="_blank" rel="noopener noreferrer">
               My solution
             </a>
           )}
         </div>
+        {showCode && <Code id={panel} refs={refs} />}
         {logged ? (
           <p className="status">
             Logged <b className={logged.grade}>{logged.grade}</b> {ago(logged.date, today)}.
@@ -294,6 +314,69 @@ function Item({ problem: p, card, isNew, logged, sent, grade, seconds, running, 
         )}
       </div>
     </li>
+  );
+}
+
+type CodeView = { html: string; snippet: Snippet } | { error: string };
+
+/** Fetches the file, cuts this problem's solution out of it, and highlights it. */
+async function renderSnippet(ref: SourceRef): Promise<CodeView> {
+  try {
+    // shiki loads while the file downloads.
+    const [source, { highlight }] = await Promise.all([loadSource(ref.path), import("./lib/highlight")]);
+    const snippet = extractSnippet(source, ref.line, ref.lang);
+    return { snippet, html: await highlight(maskSiteName(snippet.code), ref.lang) };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+const refKey = (r: SourceRef) => `${r.path}#L${r.line}`;
+
+/** The solution's code, one language at a time, as the README links it. */
+function Code({ id, refs }: { id: string; refs: SourceRef[] }) {
+  const [pick, setPick] = useState(0);
+  const [views, setViews] = useState<Record<string, CodeView>>({});
+  const ref = refs[Math.min(pick, refs.length - 1)];
+  const key = refKey(ref);
+  const view = views[key];
+
+  useEffect(() => {
+    if (views[key]) return;
+    let live = true;
+    void renderSnippet(ref).then((v) => {
+      if (live) setViews((all) => ({ ...all, [key]: v }));
+    });
+    return () => {
+      live = false;
+    };
+  }, [key, ref, views]);
+
+  const range = view && "snippet" in view ? `#L${view.snippet.first}-L${view.snippet.last}` : "";
+  return (
+    <div className="code" id={id}>
+      <div className="row small soft">
+        {refs.length > 1 && (
+          <span className="row" role="group" aria-label="Language">
+            {refs.map((r, i) => (
+              <button key={refKey(r)} className="lang" aria-pressed={r === ref} onClick={() => setPick(i)}>
+                {LANG_NAME[r.lang]}
+              </button>
+            ))}
+          </span>
+        )}
+        <a href={sourceUrl(ref.path + range)} target="_blank" rel="noopener noreferrer" className="path">
+          {ref.path}
+        </a>
+      </div>
+      {!view ? (
+        <p className="small soft">Loading code…</p>
+      ) : "error" in view ? (
+        <p className="small err">Could not load the code: {view.error}</p>
+      ) : (
+        <div className="src" dangerouslySetInnerHTML={{ __html: view.html }} />
+      )}
+    </div>
   );
 }
 
