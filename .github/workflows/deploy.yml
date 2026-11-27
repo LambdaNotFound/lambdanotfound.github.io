@@ -3,9 +3,15 @@ name: deploy
 # Tests and builds the practice page, then publishes the whole site to
 # GitHub Pages: index.html at the root, the page under /practice/.
 # Needs Settings > Pages > Build and deployment > Source: "GitHub Actions".
+#
+# The Design tab's content is copied in at build time from the public
+# system-design repository, so a design pushed there shows up at the next
+# run: the daily one below, or "Run workflow" for one now.
 on:
   push:
     branches: [main]
+  schedule:
+    - cron: "17 13 * * *" # daily, 5:17 AM PST / 6:17 AM PDT
   workflow_dispatch:
 
 permissions:
@@ -27,6 +33,18 @@ jobs:
         working-directory: practice
     steps:
       - uses: actions/checkout@v7
+
+      # Every design-doc/<slug>/rfc.md in here is bundled into the Design
+      # tab (src/lib/designs.ts). The folder is git-ignored.
+      - name: Check out the designs
+        uses: actions/checkout@v7
+        with:
+          repository: LambdaNotFound/system-design
+          path: practice/designs-src
+          persist-credentials: false
+
+      - name: Note which designs commit this build reads
+        run: echo "VITE_DESIGNS_COMMIT=$(git -C designs-src rev-parse HEAD)" >> "$GITHUB_ENV"
 
       - uses: actions/setup-node@v7
         with:

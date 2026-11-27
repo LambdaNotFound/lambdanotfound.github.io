@@ -1,9 +1,13 @@
 import {
+  Suspense,
+  lazy,
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useReducer,
+  useRef,
   useState,
   type CSSProperties,
   type Dispatch,
@@ -55,7 +59,164 @@ import {
 // Coming back to the tab after this long fetches the data again.
 const STALE_MS = 2 * 60_000;
 
+// The Design tab's code and the designs it shows load the first time it opens.
+const DesignTab = lazy(() => import("./Design"));
+
+// --- tabs ---
+
+/** #coding (or no hash), #design for the list of designs, #design/<slug> for one. */
+type Route = { tab: "coding" } | { tab: "design"; slug: string };
+
+function readRoute(): Route {
+  const h = decodeURIComponent(location.hash.replace(/^#/, ""));
+  if (h === "design") return { tab: "design", slug: "" };
+  if (h.startsWith("design/")) return { tab: "design", slug: h.slice("design/".length) };
+  return { tab: "coding" };
+}
+
+const routeKey = (r: Route) => (r.tab === "coding" ? "coding" : `design/${r.slug}`);
+const routeHref = (r: Route) =>
+  r.tab === "coding" ? "#coding" : r.slug ? `#design/${encodeURIComponent(r.slug)}` : "#design";
+
+/**
+ * The tab rail and the two views. Both views stay mounted once opened, so
+ * switching keeps grades, open code panels and each view's scroll position;
+ * the incoming view fades in and the rail's highlight slides to its tab.
+ */
 export default function App() {
+  const [route, setRoute] = useState(readRoute);
+  // The Design tab opens on the design you last had open there, or on the list.
+  const [lastSlug, setLastSlug] = useState("");
+  const [designSeen, setDesignSeen] = useState(false);
+  const designSlug = route.tab === "design" ? route.slug : lastSlug;
+  const designOpened = designSeen || route.tab === "design";
+  const scrolls = useRef<Record<string, number>>({});
+  const shown = useRef(routeKey(route));
+  const views = useRef<Record<Route["tab"], HTMLDivElement | null>>({ coding: null, design: null });
+  const tabs = useRef<Record<Route["tab"], HTMLAnchorElement | null>>({ coding: null, design: null });
+  const highlight = useRef<HTMLSpanElement>(null);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    const onHash = () => {
+      scrolls.current[shown.current] = window.scrollY;
+      setRoute(readRoute());
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+
+  const placeHighlight = useCallback(() => {
+    const tab = tabs.current[route.tab];
+    const hl = highlight.current;
+    if (!tab || !hl) return;
+    hl.style.width = `${tab.offsetWidth}px`;
+    hl.style.height = `${tab.offsetHeight}px`;
+    hl.style.transform = `translate(${tab.offsetLeft}px, ${tab.offsetTop}px)`;
+  }, [route.tab]);
+
+  useLayoutEffect(() => {
+    placeHighlight();
+    const key = routeKey(route);
+    if (key === shown.current) return;
+    const tabChanged = shown.current.split("/")[0] !== route.tab;
+    shown.current = key;
+    if (route.tab === "design") {
+      setLastSlug(route.slug);
+      setDesignSeen(true);
+    }
+    if (tabChanged) {
+      const view = views.current[route.tab];
+      view?.classList.remove("enter");
+      void view?.offsetWidth; // restart the fade
+      view?.classList.add("enter");
+    }
+    window.scrollTo({ top: scrolls.current[key] ?? 0, behavior: "instant" });
+  }, [route, placeHighlight]);
+
+  useEffect(() => {
+    // The highlight slides only after it has been placed once.
+    const id = requestAnimationFrame(() => setReady(true));
+    window.addEventListener("resize", placeHighlight);
+    return () => {
+      cancelAnimationFrame(id);
+      window.removeEventListener("resize", placeHighlight);
+    };
+  }, [placeHighlight]);
+
+  const view = (tab: Route["tab"], body: ReactNode) => (
+    <div
+      className={route.tab === tab ? "view" : "view off"}
+      aria-hidden={route.tab !== tab}
+      ref={(el) => {
+        views.current[tab] = el;
+      }}
+      onAnimationEnd={(e) => e.currentTarget.classList.remove("enter")}
+    >
+      {body}
+    </div>
+  );
+
+  return (
+    <div className="shell">
+      <nav className="rail" aria-label="Practice">
+        <div className="brand">
+          <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true">
+            <rect width="32" height="32" rx="6" fill="var(--ink)" />
+            <rect x="7" y="9" width="18" height="3" rx="1.5" fill="var(--mark)" />
+            <rect x="7" y="15" width="13" height="3" rx="1.5" fill="var(--paper)" />
+            <rect x="7" y="21" width="8" height="3" rx="1.5" fill="var(--paper)" opacity=".5" />
+          </svg>
+          Practice
+        </div>
+        <div className={ready ? "tabs ready" : "tabs"}>
+          <span className="hl" ref={highlight} aria-hidden="true" />
+          <a
+            href="#coding"
+            aria-current={route.tab === "coding" ? "page" : undefined}
+            ref={(el) => {
+              tabs.current.coding = el;
+            }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M8 6 2 12l6 6M16 6l6 6-6 6" />
+            </svg>
+            Coding
+          </a>
+          <a
+            href={routeHref({ tab: "design", slug: designSlug })}
+            aria-current={route.tab === "design" ? "page" : undefined}
+            ref={(el) => {
+              tabs.current.design = el;
+            }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <rect x="3" y="3" width="7" height="6" rx="1" />
+              <rect x="14" y="15" width="7" height="6" rx="1" />
+              <rect x="14" y="3" width="7" height="6" rx="1" />
+              <path d="M10 6h4M17.5 9v6" />
+            </svg>
+            Design
+          </a>
+        </div>
+      </nav>
+      <main className="views">
+        {view("coding", <Coding />)}
+        {designOpened &&
+          view(
+            "design",
+            <Suspense fallback={<p className="soft">Loading the designs…</p>}>
+              <DesignTab slug={designSlug} active={route.tab === "design"} />
+            </Suspense>,
+          )}
+      </main>
+    </div>
+  );
+}
+
+// --- the Coding tab: today's plan ---
+
+function Coding() {
   const [data, setData] = useState<Loaded | null>(null);
   const [error, setError] = useState("");
   const [loadedAt, setLoadedAt] = useState(0);
@@ -98,12 +259,13 @@ export default function App() {
 
   if (!data) {
     return (
-      <main>
+      <>
         <header>
+          <p className="crumb">{formatDate(pacificNow(new Date()).date)}</p>
           <h1>Daily Practice</h1>
         </header>
         {error ? refresh : <p className="soft">Loading…</p>}
-      </main>
+      </>
     );
   }
   return <Page data={data} footer={refresh} />;
@@ -135,12 +297,10 @@ function Page({ data, footer }: { data: Loaded; footer: ReactNode }) {
   const done = ids.length > 0 && ids.every((id) => logged(id));
 
   return (
-    <main>
+    <>
       <header>
-        <div className="top">
-          <h1>Daily Practice</h1>
-          <span className="soft">{formatDate(today)}</span>
-        </div>
+        <p className="crumb">{formatDate(today)}</p>
+        <h1>Daily Practice</h1>
         <p className="lead">{lead(view, today, hour, reviewIds.length, newIds.length, done)}</p>
         {view.kind === "paused" && (
           <div className="row">
@@ -179,7 +339,7 @@ function Page({ data, footer }: { data: Loaded; footer: ReactNode }) {
 
       <Board problems={problems} state={state} today={today} planIds={ids} />
       {footer}
-    </main>
+    </>
   );
 }
 
