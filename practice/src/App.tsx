@@ -28,7 +28,6 @@ import {
   servedIds,
   slipLines,
   sourceUrl,
-  suggestGrade,
   type Card,
   type Grade,
   type LogEntry,
@@ -37,7 +36,6 @@ import {
   type View,
 } from "./lib/practice";
 import {
-  elapsed,
   emptySession,
   loadSession,
   loadToken,
@@ -130,15 +128,6 @@ function Page({ data, footer }: { data: Loaded; footer: ReactNode }) {
   }, [planDate, idKey]);
   useEffect(() => saveSession(session), [session]);
 
-  // Repaint the running clock; nothing else on the page changes by itself.
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    if (!session.running) return;
-    const t = setInterval(() => setTick((n) => n + 1), 500);
-    return () => clearInterval(t);
-  }, [session.running]);
-
-  const now = Date.now();
   const logged = (id: string) => loggedSince(state, id, planDate);
   const pending = slipLines(
     ids.filter((id) => !logged(id)),
@@ -178,8 +167,6 @@ function Page({ data, footer }: { data: Loaded; footer: ReactNode }) {
                   logged={logged(id)}
                   sent={session.sent[id]}
                   grade={session.grades[id]}
-                  seconds={elapsed(session, id, now)}
-                  running={session.running?.id === id}
                   solutions={solutions.get(byId.get(id)!.slug) ?? NONE}
                   today={today}
                   dispatch={dispatch}
@@ -226,9 +213,6 @@ function ago(date: string, today: string): string {
   return n <= 0 ? "today" : n === 1 ? "yesterday" : `${n} days ago`;
 }
 
-const mmss = (s: number) =>
-  `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
-
 interface ItemProps {
   problem: Problem;
   card?: Card;
@@ -236,19 +220,15 @@ interface ItemProps {
   logged?: LogEntry;
   sent?: Grade;
   grade?: Grade;
-  seconds: number;
-  running: boolean;
   solutions: string[];
   today: string;
   dispatch: Dispatch<Action>;
 }
 
-function Item({ problem: p, card, isNew, logged, sent, grade, seconds, running, solutions, today, dispatch }: ItemProps) {
-  const open = !logged && !sent;
+function Item({ problem: p, card, isNew, logged, sent, grade, solutions, today, dispatch }: ItemProps) {
   const refs = useMemo(() => solutions.flatMap((link) => parseSourceRef(link) ?? []), [solutions]);
   const [showCode, setShowCode] = useState(false);
   const panel = useId();
-  const suggestion = open && !grade && !running && seconds >= 60 ? suggestGrade(p.difficulty, seconds / 60) : undefined;
   return (
     <li className="item">
       <div className="no">{p.id}</div>
@@ -265,14 +245,6 @@ function Item({ problem: p, card, isNew, logged, sent, grade, seconds, running, 
           {card && !logged && <span>last solved {ago(card.last, today)}</span>}
         </div>
         <div className="row">
-          {open && (
-            <>
-              <span className="clock" aria-label="Time spent">{mmss(seconds)}</span>
-              <button onClick={() => dispatch({ type: "timer", id: p.id, now: Date.now() })}>
-                {running ? "Stop" : seconds > 0 ? "Continue timer" : "Start timer"}
-              </button>
-            </>
-          )}
           {refs.length > 0 && (
             <button aria-expanded={showCode} aria-controls={panel} onClick={() => setShowCode((v) => !v)}>
               {showCode ? "Hide code" : "Show code"}
@@ -298,18 +270,13 @@ function Item({ problem: p, card, isNew, logged, sent, grade, seconds, running, 
             {GRADES.map((g) => (
               <button
                 key={g}
-                className={`g ${g}${g === suggestion ? " sug" : ""}`}
+                className={`g ${g}`}
                 aria-pressed={grade === g}
-                onClick={() => dispatch({ type: "grade", id: p.id, grade: g, now: Date.now() })}
+                onClick={() => dispatch({ type: "grade", id: p.id, grade: g })}
               >
                 {g}
               </button>
             ))}
-            {suggestion && (
-              <span className="small soft">
-                {mmss(seconds)} suggests {suggestion}
-              </span>
-            )}
           </div>
         )}
       </div>

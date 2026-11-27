@@ -165,22 +165,6 @@ export function logIssueError(status: number): string {
   return `GitHub answered ${status}. Use Log on GitHub instead.`;
 }
 
-// Minutes up to which a solve suggests easy / good / hard; anything longer
-// suggests again. These are guesses to start from, not measurements.
-const LIMITS: Record<Difficulty, [number, number, number]> = {
-  E: [8, 15, 25],
-  M: [15, 25, 40],
-  H: [20, 35, 50],
-};
-
-export function suggestGrade(difficulty: Difficulty, minutes: number): Grade {
-  const [easy, good, hard] = LIMITS[difficulty];
-  if (minutes <= easy) return "easy";
-  if (minutes <= good) return "good";
-  if (minutes <= hard) return "hard";
-  return "again";
-}
-
 // --- memory board ---
 
 /**
@@ -220,8 +204,8 @@ export function byCategory(problems: Problem[]): [string, Problem[]][] {
 
 /**
  * Maps a problem slug to the solution files that GoCode's README index links
- * for it. Rows look like:
- *   | Tag | 1. Two Sum | [..](https://<site>/problems/two-sum/) | [go](golang/x.go#L6) | [py](python/x.py#L7) |
+ * for it, in column order (Go, Python, Rust). Rows look like:
+ *   | Tag | 1. Two Sum | [..](https://<site>/problems/two-sum/) | [go](go/dsa/x.go#L6) | [py](python/dsa/x.py#L7) | [rs](rust/dsa/x.rs#L7) |
  */
 export function parseSolutions(readme: string): Map<string, string[]> {
   const out = new Map<string, string[]>();

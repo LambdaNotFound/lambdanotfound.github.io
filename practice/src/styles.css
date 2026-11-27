@@ -112,13 +112,11 @@ header .lead { max-width: 65ch; }
 .row:empty { display: none; }
 .tag { font: 600 12px/1 var(--body); letter-spacing: 0.04em; padding: 4px 7px; border: 1px solid var(--line); border-radius: 3px; }
 .tag.new { background: var(--mark); border-color: var(--mark); color: var(--mark-ink); }
-.clock { font: 600 16px/1 var(--num); font-variant-numeric: tabular-nums; min-width: 62px; }
 .g[aria-pressed="true"] { color: var(--sheet); font-weight: 600; }
 .g.again[aria-pressed="true"] { background: var(--again); border-color: var(--again); }
 .g.hard[aria-pressed="true"] { background: var(--hard); border-color: var(--hard); }
 .g.good[aria-pressed="true"] { background: var(--good); border-color: var(--good); }
 .g.easy[aria-pressed="true"] { background: var(--easy); border-color: var(--easy); }
-.g.sug { border: 2px dashed var(--mark); }
 .status b.again { color: var(--again); }
 .status b.hard { color: var(--hard); }
 .status b.good { color: var(--good); }

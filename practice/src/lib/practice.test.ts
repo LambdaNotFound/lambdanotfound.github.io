@@ -13,7 +13,6 @@ import {
   pickView,
   retention,
   slipLines,
-  suggestGrade,
   type Problem,
   type State,
 } from "./practice";
@@ -132,13 +131,6 @@ describe("logging", () => {
     expect(logIssueError(502)).toMatch(/502.*Log on GitHub/);
     for (const s of [401, 403, 502]) expect(logIssueError(s)).not.toMatch(/leetcode/i);
   });
-
-  it("suggests a grade from the time spent", () => {
-    expect(suggestGrade("E", 8)).toBe("easy");
-    expect(suggestGrade("E", 9)).toBe("good");
-    expect(suggestGrade("M", 40)).toBe("hard");
-    expect(suggestGrade("H", 51)).toBe("again");
-  });
 });
 
 describe("memory board", () => {
@@ -185,6 +177,11 @@ describe("parseSolutions", () => {
   it("keeps each problem's first row, Go before Python", () => {
     expect(map.get("two-sum")).toEqual(["golang/hashmap/hashmap.go#L6", "python/hashmap/hashmap.py#L7"]);
     expect(map.get("valid-parentheses")).toEqual(["python/stack_queue/stack.py#L3"]);
+  });
+
+  it("reads a Rust column after Python", () => {
+    const row = "| Hash Table | 1. Two Sum | [L](https://example.com/problems/two-sum/) | [a](go/dsa/h.go#L6) | [b](python/dsa/h.py#L7) | [c](rust/dsa/h.rs#L7) |";
+    expect(parseSolutions(row).get("two-sum")).toEqual(["go/dsa/h.go#L6", "python/dsa/h.py#L7", "rust/dsa/h.rs#L7"]);
   });
 
   it("skips rows without a solution and non-table text", () => {
