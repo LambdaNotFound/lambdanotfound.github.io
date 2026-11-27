@@ -13,7 +13,6 @@ import { loadData, loadSource, type Loaded } from "./lib/data";
 import {
   DIFFICULTY_NAME,
   GRADES,
-  addDays,
   byCategory,
   daysBetween,
   formatDate,
@@ -484,9 +483,7 @@ function TokenSetup({ token, onSave }: { token: string; onSave: (token: string) 
 }
 
 function Board({ problems, state, today, planIds }: { problems: Problem[]; state: State; today: string; planIds: string[] }) {
-  const [offset, setOffset] = useState(0);
   const [info, setInfo] = useState("Point at a number for details.");
-  const date = addDays(today, offset);
   const served = useMemo(() => servedIds(state), [state]);
   const groups = useMemo(() => byCategory(problems), [problems]);
   const tally = { fresh: 0, fading: 0, faded: 0, shown: 0, unseen: 0 };
@@ -501,12 +498,12 @@ function Board({ problems, state, today, planIds }: { problems: Problem[]; state
           let style: CSSProperties | undefined;
           let detail: string;
           if (card) {
-            const r = retention(card, date);
+            const r = retention(card, today);
             const a = inkAlpha(r);
             cls += a > 0.55 ? " ink dark" : " ink";
             style = { "--a": a.toFixed(2) } as CSSProperties;
             tally[r >= 0.9 ? "fresh" : r >= 0.3 ? "fading" : "faded"]++;
-            const due = card.due <= date ? "due now" : `next review ${formatDate(card.due)}`;
+            const due = card.due <= today ? "due now" : `next review ${formatDate(card.due)}`;
             detail = `last solved ${formatDate(card.last)}, ${due}, about ${Math.round(r * 100)}% remembered`;
           } else if (served.has(p.id)) {
             cls += " seen";
@@ -545,10 +542,6 @@ function Board({ problems, state, today, planIds }: { problems: Problem[]; state
         Every problem in the set. A number prints darker the better you should remember it, and fades as its review
         date passes. The fade is an estimate: 90% on the day a review is due.
       </p>
-      <div className="slide">
-        <label htmlFor="ahead">{offset === 0 ? "Today" : `In ${count(offset, "day")}, ${formatDate(date)}, with no reviews`}</label>
-        <input id="ahead" type="range" min={0} max={60} value={offset} onChange={(e) => setOffset(Number(e.target.value))} />
-      </div>
       <div className="key">
         {key.map(([text, style]) => (
           <span key={text}>

@@ -202,8 +202,6 @@ header .lead { max-width: 65ch; }
 .key span { display: inline-flex; gap: 8px; align-items: center; }
 .key i { width: 26px; height: 18px; border-radius: 2px; display: inline-block; border: 1px solid var(--line); }
 .info { min-height: 48px; font-size: 15px; }
-.slide { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 14px; align-items: center; }
-.slide input { width: 100%; accent-color: var(--mark); }
 .footer { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 
 @media (max-width: 820px) {
@@ -213,5 +211,4 @@ header .lead { max-width: 65ch; }
 @media (max-width: 560px) {
   .item { grid-template-columns: minmax(0, 1fr); }
   .cat { grid-template-columns: minmax(0, 1fr); gap: 4px; }
-  .slide { grid-template-columns: minmax(0, 1fr); }
 }
