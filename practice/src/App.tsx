@@ -251,16 +251,8 @@ function Coding() {
     return () => document.removeEventListener("visibilitychange", onShow);
   }, [load, loadedAt]);
 
-  const refresh = (
-    <p className="small soft footer">
-      {loadedAt > 0 && <>Updated {new Date(loadedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}. </>}
-      <button onClick={() => void load()} disabled={loading}>
-        {loading ? "Loading…" : "Refresh"}
-      </button>
-      {error && <span className="err"> Could not load the data: {error}</span>}
-    </p>
-  );
-
+  // Coming back to the tab refreshes the data, so a loaded page needs no
+  // button for it. Only a first load that failed offers to try again.
   if (!data) {
     return (
       <>
@@ -268,14 +260,23 @@ function Coding() {
           <p className="crumb">{formatDate(pacificNow(new Date()).date)}</p>
           <h1>Daily Practice</h1>
         </header>
-        {error ? refresh : <p className="soft">Loading…</p>}
+        {error ? (
+          <p className="small soft footer">
+            <span className="err">Could not load the data: {error}</span>
+            <button onClick={() => void load()} disabled={loading}>
+              {loading ? "Loading…" : "Try again"}
+            </button>
+          </p>
+        ) : (
+          <p className="soft">Loading…</p>
+        )}
       </>
     );
   }
-  return <Page data={data} footer={refresh} />;
+  return <Page data={data} />;
 }
 
-function Page({ data, footer }: { data: Loaded; footer: ReactNode }) {
+function Page({ data }: { data: Loaded }) {
   const { problems, state, solutions } = data;
   const { date: today, hour } = pacificNow(new Date());
   const view = pickView(state, today);
@@ -342,7 +343,6 @@ function Page({ data, footer }: { data: Loaded; footer: ReactNode }) {
       )}
 
       <Board problems={problems} state={state} today={today} planIds={ids} />
-      {footer}
     </>
   );
 }
@@ -594,14 +594,6 @@ function Slip({ date, planDate, lines, onSend }: { date: string; planDate: strin
     setToken(t);
     setNote(t ? "Token saved in this browser. Log now sends straight to GitHub." : "Token forgotten.");
   };
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setNote("Copied.");
-    } catch {
-      setNote("Could not copy. Select the lines above and copy them.");
-    }
-  };
   const pasteNote = (n: number) => `Copied. Paste the lines as a comment on #${n} and press Comment.`;
   return (
     <aside className="slip" aria-label="Log">
@@ -645,9 +637,6 @@ function Slip({ date, planDate, lines, onSend }: { date: string; planDate: strin
       >
         Log on GitHub
       </a>
-      <button onClick={() => void copy()} disabled={!text}>
-        Copy text
-      </button>
       <p className="small soft">
         {note ||
           (issue
