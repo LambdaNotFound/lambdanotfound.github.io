@@ -37,6 +37,11 @@ export interface Card {
 export interface Plan {
   review: string[];
   new: string[];
+  // Items shown on an earlier day and not logged since. Logging one of them
+  // tops the plan up, so review and new can grow during the day: GoCode's
+  // log-solve workflow appends the additions after what was already there.
+  carried?: string[];
+  deferred?: string[];
 }
 
 export interface LogEntry {
