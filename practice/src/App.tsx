@@ -422,7 +422,10 @@ function Item({ problem: p, card, isNew, logged, sent, grade, solutions, today, 
           </p>
         ) : sent ? (
           <p className="status">
-            Sent as <b className={sent}>{sent}</b>. It shows as logged a few minutes after the issue is submitted.
+            Sent as <b className={sent}>{sent}</b>. It shows as logged a few minutes after the issue is submitted.{" "}
+            <button className="linkbtn" onClick={() => dispatch({ type: "unsend", id: p.id })}>
+              Grade again
+            </button>
           </p>
         ) : (
           <div className="row" role="group" aria-label={`Grade ${p.title}`}>

@@ -16,6 +16,17 @@ describe("grades", () => {
     expect(s.grades).toEqual({});
     expect(s.sent).toEqual({ "1": "hard" });
   });
+
+  it("grades a sent problem again with the grade it was sent with", () => {
+    const s = reducer(start({ grades: { "2": "good" }, sent: { "1": "hard", "3": "easy" } }), { type: "unsend", id: "1" });
+    expect(s.sent).toEqual({ "3": "easy" });
+    expect(s.grades).toEqual({ "1": "hard", "2": "good" });
+  });
+
+  it("leaves a problem that was not sent alone", () => {
+    const s = start({ sent: { "3": "easy" } });
+    expect(reducer(s, { type: "unsend", id: "1" })).toBe(s);
+  });
 });
 
 describe("a new plan", () => {

@@ -13,7 +13,8 @@ export interface Session {
 export type Action =
   | { type: "open"; date: string; ids: string[] }
   | { type: "grade"; id: string; grade: Grade }
-  | { type: "send" };
+  | { type: "send" }
+  | { type: "unsend"; id: string };
 
 export const emptySession = (date: string): Session => ({ date, grades: {}, sent: {} });
 
@@ -34,6 +35,14 @@ export function reducer(s: Session, a: Action): Session {
     }
     case "send":
       return { ...s, sent: { ...s.sent, ...s.grades }, grades: {} };
+    case "unsend": {
+      // Back to graded, with the grade it was sent with: the GitHub form
+      // may have been closed unsubmitted, or the grade may need changing.
+      // A later log of the same problem that day replaces the first.
+      const { [a.id]: grade, ...sent } = s.sent;
+      if (!grade) return s;
+      return { ...s, sent, grades: { ...s.grades, [a.id]: grade } };
+    }
   }
 }
 
