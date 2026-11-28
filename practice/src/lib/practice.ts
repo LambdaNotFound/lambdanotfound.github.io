@@ -1,7 +1,7 @@
 // Pure logic for the practice page: no DOM, no fetch, so Vitest covers it.
 //
-// The plan itself is picked by sr.py in the GoCode repo, once a day from
-// 3 PM Pacific, and recorded in state.json. This page only reads that file:
+// The plan itself is picked by sr.py in the GoCode repo, once a day, usually
+// between midnight and 4 AM Pacific, and recorded in state.json. This page only reads that file:
 // it shows the latest plan, and logs grades by opening a GitHub issue that
 // GoCode's log-solve workflow turns into `sr.py log` calls. The issue is
 // either prefilled for the viewer to submit, or, with a token the viewer

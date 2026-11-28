@@ -356,13 +356,13 @@ function lead(view: View, today: string, hour: number, reviews: number, fresh: n
     case "plan": {
       if (view.isToday) {
         const mix = `${count(reviews, "review")} and ${fresh} new.`;
-        return done ? `${mix} All logged. The next plan comes tomorrow after 3 PM Pacific.` : mix;
+        return done ? `${mix} All logged. The next plan comes early tomorrow, Pacific time.` : mix;
       }
       const from = `Until then, here is the plan from ${formatDate(view.date)}.`;
-      if (daysBetween(view.date, today) > 1) return `No plan since ${formatDate(view.date)}. Today's comes after 3 PM Pacific.`;
-      return hour < 15
-        ? `Today's plan comes after 3 PM Pacific. ${from}`
-        : `Today's plan is on its way: GitHub often starts it a few hours after 3 PM Pacific. ${from}`;
+      if (daysBetween(view.date, today) > 1) return `No plan since ${formatDate(view.date)}. Today's usually comes by 4 AM Pacific, or else around 6 PM.`;
+      return hour < 4
+        ? `Today's plan usually comes by 4 AM Pacific. ${from}`
+        : `Today's plan is late: GitHub skipped its overnight run, so it may not come until about 6 PM Pacific. ${from}`;
     }
   }
 }
