@@ -295,8 +295,9 @@ function Page({ data }: { data: Loaded }) {
   useEffect(() => saveSession(session), [session]);
 
   const logged = (id: string) => loggedSince(state, id, planDate);
+  // A logged problem joins the slip only when graded again with a new grade.
   const pending = slipLines(
-    ids.filter((id) => !logged(id)),
+    ids.filter((id) => logged(id)?.grade !== session.grades[id]),
     session.grades,
   );
   const done = ids.length > 0 && ids.every((id) => logged(id));
@@ -418,22 +419,32 @@ function Item({ problem: p, card, isNew, logged, sent, grade, solutions, today, 
               My solution
             </a>
           )}
-          {sent && !logged && (
+          {(logged ? logged.date === today : sent) && !grade && (
             // For a comment never posted, or a grade to change: GoCode keeps
-            // the last log of a problem on a day.
-            <button onClick={() => dispatch({ type: "unsend", id: p.id })}>Grade again</button>
+            // the last log of a problem on a day, so only a log from today
+            // can be replaced; a new grade for an older one would be a
+            // second review. Pressing the pressed grade again puts the
+            // problem back as it was.
+            <button
+              onClick={() =>
+                dispatch(sent ? { type: "unsend", id: p.id } : { type: "grade", id: p.id, grade: logged!.grade })
+              }
+            >
+              Grade again
+            </button>
           )}
         </div>
         {showCode && <Code id={panel} refs={refs} />}
-        {logged ? (
-          <p className="status">
-            Logged <b className={logged.grade}>{logged.grade}</b> {ago(logged.date, today)}.
-          </p>
-        ) : sent ? (
+        {grade ? null : sent && sent !== logged?.grade ? (
           <p className="status">
             Sent as <b className={sent}>{sent}</b>. It shows as logged a few minutes after it reaches GitHub.
           </p>
-        ) : (
+        ) : logged ? (
+          <p className="status">
+            Logged <b className={logged.grade}>{logged.grade}</b> {ago(logged.date, today)}.
+          </p>
+        ) : null}
+        {(grade || (!sent && !logged)) && (
           <div className="row" role="group" aria-label={`Grade ${p.title}`}>
             {GRADES.map((g) => (
               <button
