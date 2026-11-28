@@ -562,7 +562,11 @@ function Slip({ date, lines, onSend }: { date: string; lines: string[]; onSend: 
         rel="noopener noreferrer"
         onClick={(e) => {
           if (!text) return e.preventDefault();
-          onSend();
+          // onSend clears the grades, and with them this link's href. React
+          // re-renders before the click handler returns, and the browser
+          // follows the link only after that, by which time there is no href
+          // left to follow. Waiting one task lets the GitHub tab open first.
+          setTimeout(onSend, 0);
           setNote("Opened on GitHub. Submit the issue there to log these.");
         }}
       >
