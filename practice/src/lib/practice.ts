@@ -2,10 +2,12 @@
 //
 // The plan itself is picked by sr.py in the GoCode repo, once a day, usually
 // between midnight and 4 AM Pacific, and recorded in state.json. This page only reads that file:
-// it shows the latest plan, and logs grades by opening a GitHub issue that
-// GoCode's log-solve workflow turns into `sr.py log` calls. The issue is
-// either prefilled for the viewer to submit, or, with a token the viewer
-// saved, created straight through GitHub's API.
+// it shows the latest plan, and logs grades as a comment on the plan's
+// "Daily Practice" issue, which GoCode's log-solve workflow turns into
+// `sr.py log` calls. GitHub can't prefill a comment, so the page copies the
+// lines and opens the issue for the viewer to paste them, or, with a token
+// the viewer saved, posts the comment through GitHub's API. When the issue
+// can't be found, it falls back to a prefilled "Practice log" issue.
 
 export const REPO = "LambdaNotFound/GoCode";
 
@@ -141,31 +143,73 @@ export function logIssueUrl(date: string, body: string): string {
   return `https://github.com/${REPO}/issues/new?title=${q(`Practice log ${date}`)}&body=${q(body)}`;
 }
 
+const apiHeaders = (token: string): Record<string, string> => ({
+  Accept: "application/vnd.github+json",
+  ...(token ? { Authorization: `Bearer ${token}` } : {}),
+});
+
+const post = (url: string, token: string, payload: unknown): { url: string; init: RequestInit } => ({
+  url,
+  init: {
+    method: "POST",
+    headers: { ...apiHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  },
+});
+
 /**
  * The same log issue, created through GitHub's API with the viewer's token:
  * one tap instead of a trip to GitHub's form. The issue is opened as the
  * token's owner, which is what log-solve.yml checks.
  */
 export function logIssueRequest(date: string, body: string, token: string): { url: string; init: RequestInit } {
-  return {
-    url: `https://api.github.com/repos/${REPO}/issues`,
-    init: {
-      method: "POST",
-      headers: {
-        Accept: "application/vnd.github+json",
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ title: `Practice log ${date}`, body }),
-    },
-  };
+  return post(`https://api.github.com/repos/${REPO}/issues`, token, { title: `Practice log ${date}`, body });
 }
 
-/** What to tell the viewer when GitHub refuses that request. */
+// --- the plan's issue ---
+
+/** The plan's issue, as GitHub's API names it. */
+export interface DailyIssue {
+  number: number;
+  /** The issue's page, to paste a comment on. */
+  url: string;
+  /** Where the API takes a new comment. */
+  commentsUrl: string;
+}
+
+/** The newest issues, which hold the issue of any plan the page shows. */
+export function issueListRequest(token: string): { url: string; init: RequestInit } {
+  return { url: `https://api.github.com/repos/${REPO}/issues?state=all&per_page=30`, init: { headers: apiHeaders(token) } };
+}
+
+/** The issue daily-leetcode.yml opened for a plan's date, in a page of the issue list. */
+export function findDailyIssue(issues: unknown, date: string): DailyIssue | null {
+  if (!Array.isArray(issues)) return null;
+  for (const i of issues as Record<string, unknown>[]) {
+    if (
+      i &&
+      i.title === `Daily Practice ${date}` &&
+      !i.pull_request &&
+      typeof i.number === "number" &&
+      typeof i.html_url === "string" &&
+      typeof i.comments_url === "string"
+    ) {
+      return { number: i.number, url: i.html_url, commentsUrl: i.comments_url };
+    }
+  }
+  return null;
+}
+
+/** A comment on the plan's issue, posted as the token's owner, which is what log-solve.yml checks. */
+export function commentRequest(issue: DailyIssue, body: string, token: string): { url: string; init: RequestInit } {
+  return post(issue.commentsUrl, token, { body });
+}
+
+/** What to tell the viewer when GitHub refuses a log request. */
 export function logIssueError(status: number): string {
   if (status === 401) return "GitHub didn't accept the token. Forget it and save a new one.";
   if (status === 403 || status === 404) {
-    return "The token can't open issues in GoCode. It needs Issues: Read and write on that repository.";
+    return "The token can't write to GoCode's issues. It needs Issues: Read and write on that repository.";
   }
   return `GitHub answered ${status}. Use Log on GitHub instead.`;
 }

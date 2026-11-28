@@ -4,6 +4,9 @@ import {
   byCategory,
   daysBetween,
   inkAlpha,
+  commentRequest,
+  findDailyIssue,
+  issueListRequest,
   logIssueError,
   logIssueRequest,
   logIssueUrl,
@@ -187,5 +190,49 @@ describe("parseSolutions", () => {
   it("skips rows without a solution and non-table text", () => {
     expect(map.has("same-tree")).toBe(false);
     expect(map.size).toBe(2);
+  });
+});
+
+describe("the plan's issue", () => {
+  const issue = (number: number, title: string, extra: Record<string, unknown> = {}) => ({
+    number,
+    title,
+    html_url: `https://github.com/LambdaNotFound/Code/issues/${number}`,
+    comments_url: `https://api.github.com/repos/LambdaNotFound/Code/issues/${number}/comments`,
+    ...extra,
+  });
+  const list = [
+    issue(137, "Practice log 2026-11-26"),
+    issue(136, "Daily Practice 2026-11-26"),
+    issue(135, "Daily Practice 2026-11-25"),
+  ];
+
+  it("finds the issue opened for the plan's date", () => {
+    expect(findDailyIssue(list, "2026-11-25")).toEqual({
+      number: 135,
+      url: "https://github.com/LambdaNotFound/Code/issues/135",
+      commentsUrl: "https://api.github.com/repos/LambdaNotFound/Code/issues/135/comments",
+    });
+  });
+
+  it("finds nothing for a date without one, a pull request, or an error body", () => {
+    expect(findDailyIssue(list, "2026-11-27")).toBe(null);
+    expect(findDailyIssue([issue(9, "Daily Practice 2026-11-27", { pull_request: {} })], "2026-11-27")).toBe(null);
+    expect(findDailyIssue({ message: "API rate limit exceeded" }, "2026-11-25")).toBe(null);
+  });
+
+  it("lists issues with the token when there is one, and without it otherwise", () => {
+    expect(issueListRequest("").init.headers).not.toHaveProperty("Authorization");
+    expect(issueListRequest("tok").init.headers).toHaveProperty("Authorization", "Bearer tok");
+    expect(issueListRequest("").url).toMatch(/\/issues\?state=all&per_page=30$/);
+  });
+
+  it("posts the lines as a comment on that issue", () => {
+    const found = findDailyIssue(list, "2026-11-26")!;
+    const { url, init } = commentRequest(found, "1 hard\n53 good", "tok");
+    expect(url).toBe(found.commentsUrl);
+    expect(init.method).toBe("POST");
+    expect(init.headers).toHaveProperty("Authorization", "Bearer tok");
+    expect(JSON.parse(String(init.body))).toEqual({ body: "1 hard\n53 good" });
   });
 });

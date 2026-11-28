@@ -179,8 +179,6 @@ header .lead { max-width: 65ch; }
 .status b.hard { color: var(--hard); }
 .status b.good { color: var(--good); }
 .status b.easy { color: var(--easy); }
-.linkbtn { all: unset; color: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
-.linkbtn:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 
 /* "Show code": the solution from GoCode, highlighted by shiki. Its HTML
    carries both themes as --shiki-light / --shiki-dark; the page's scheme

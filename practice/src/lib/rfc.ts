@@ -1,7 +1,7 @@
 // Pure parser for the Design tab: no DOM, no fetch, so Vitest covers it.
 //
 // It reads an RFC from the system-design repository (design-doc/<slug>/rfc.md)
-// and sorts it into the six steps of a system design interview. It relies on
+// and sorts it into the steps of a system design interview. It relies on
 // the shape that repository's .claude/skills/new-design/rfc-spec.md fixes:
 // the section names, the `| ID | Requirement |` tables, a bold label opening
 // each non-functional requirement, the "The forcing question is ..." sentence,
@@ -89,10 +89,11 @@ export interface Design {
   /** Step 4: every solution subsection drawn as a sequence diagram, and the worked example. */
   flows: Section[];
   example: Section | null;
-  /** Step 5: the overview with its architecture diagram, then the other components. */
+  /** The overview's architecture drawing, with its lead-in and legend; taken out of `overview`. */
+  architecture: Block[];
+  /** The overview without its drawing, then the other components. */
   overview: Section | null;
   components: Section[];
-  /** Step 6. */
   decisions: Decision[];
   failureModes: FailureMode[];
   failureNotes: Block[];
@@ -367,6 +368,30 @@ export function parseTables(sql: string): Entity[] {
 
 const isSequence = (b: Block) => b.kind === "mermaid" && /^\s*(%%.*\n\s*)*sequenceDiagram\b/.test(b.text);
 
+/**
+ * Splits the Overview's architecture drawing from its prose. The drawing is a
+ * Mermaid block other than a sequence, an embedded image, or, before the user
+ * has drawn it, rfc-spec's one-line `*Diagram:` brief. A paragraph ending in
+ * ":" just before a Mermaid block introduces it, and a list just after it is
+ * its legend, so both go with it.
+ */
+export function splitArchitecture(blocks: Block[]): { architecture: Block[]; rest: Block[] } {
+  const taken = new Set<number>();
+  blocks.forEach((b, i) => {
+    const drawing = b.kind === "mermaid" && !isSequence(b);
+    const picture = b.kind === "p" && (/^!\[[^\]]*\]\([^)]+\)$/.test(b.text.trim()) || /^\*Diagram:/.test(b.text));
+    if (!drawing && !picture) return;
+    taken.add(i);
+    const before = blocks[i - 1];
+    if (drawing && before?.kind === "p" && before.text.trim().endsWith(":")) taken.add(i - 1);
+    if ((drawing || picture) && blocks[i + 1]?.kind === "list") taken.add(i + 1);
+  });
+  return {
+    architecture: blocks.filter((_, i) => taken.has(i)),
+    rest: blocks.filter((_, i) => !taken.has(i)),
+  };
+}
+
 /** Everything the Design tab shows for one RFC. `ref` is the system-design commit, or "main". */
 export function parseRfc(md: string, slug: string, ref = "main"): Design {
   const dir = `design-doc/${slug}`;
@@ -420,6 +445,8 @@ export function parseRfc(md: string, slug: string, ref = "main"): Design {
   if (solution && !overview && solution.lines.some((l) => l.trim())) {
     overview = { title: "Overview", blocks: blocks(solution.lines) };
   }
+  const { architecture, rest } = splitArchitecture(overview?.blocks ?? []);
+  if (overview) overview = { ...overview, blocks: rest };
   const tables = entities
     ? entities.blocks.flatMap((b) => (b.kind === "code" && /CREATE TABLE/i.test(b.text) ? parseTables(b.text) : []))
     : [];
@@ -468,6 +495,7 @@ export function parseRfc(md: string, slug: string, ref = "main"): Design {
     api,
     flows,
     example,
+    architecture,
     overview,
     components,
     decisions,

@@ -331,12 +331,14 @@ function Outline({ s, keep = () => false, more = "More" }: { s: Section; keep?: 
 // --- the design page ---
 
 const STEPS = [
-  { id: "requirements", title: "Requirements", time: "~5 min" },
+  { id: "functional", title: "Functional requirements", time: "~3 min" },
+  { id: "nonfunctional", title: "Non-functional requirements", time: "~3 min" },
   { id: "entities", title: "Core entities", time: "~2 min" },
   { id: "api", title: "API", time: "~5 min" },
   { id: "flow", title: "Data flow", time: "~5 min" },
-  { id: "hld", title: "High-level design", time: "~10–15 min" },
-  { id: "dives", title: "Deep dives", time: "~10 min" },
+  { id: "architecture", title: "Architecture diagram", time: "~5 min" },
+  { id: "hld", title: "High-level design", time: "~10 min" },
+  { id: "lld", title: "Low-level design & deep dives", time: "~10 min" },
 ] as const;
 
 type StepId = (typeof STEPS)[number]["id"];
@@ -345,7 +347,7 @@ function DesignPage({ d, active }: { d: Design; active: boolean }) {
   const reqs = useMemo(() => new Map([...d.functional, ...d.nonFunctional].map((r) => [r.id, r])), [d]);
   const [pop, setPop] = useState<{ id: string; left: number; top: number } | null>(null);
   const popRef = useRef<HTMLDivElement>(null);
-  const [current, setCurrent] = useState<StepId>("requirements");
+  const [current, setCurrent] = useState<StepId>("functional");
   const sections = useRef<Partial<Record<StepId, HTMLElement | null>>>({});
   const stepList = useRef<HTMLOListElement>(null);
 
@@ -476,15 +478,24 @@ function DesignPage({ d, active }: { d: Design; active: boolean }) {
           </ol>
 
           <div className="content">
-            {step("requirements", <RequirementsStep d={d} />)}
+            {step("functional", <FunctionalStep d={d} />)}
+            {step("nonfunctional", <NonFunctionalStep d={d} />)}
             {step("entities", <EntitiesStep d={d} />)}
             {step(
               "api",
               d.api ? <Blocks blocks={d.api.blocks} /> : <p className="soft">The RFC has no API section.</p>,
             )}
             {step("flow", <FlowStep d={d} />)}
+            {step(
+              "architecture",
+              d.architecture.length ? (
+                <Blocks blocks={d.architecture} />
+              ) : (
+                <p className="soft">The RFC has no architecture diagram yet.</p>
+              ),
+            )}
             {step("hld", <HighLevelStep d={d} />)}
-            {step("dives", <DivesStep d={d} />)}
+            {step("lld", <LowLevelStep d={d} />)}
             <footer className="dfoot">
               <p>
                 Taken from <code>design-doc/{d.slug}/rfc.md</code> in the system-design repository. Not shown here:
@@ -519,13 +530,11 @@ function DesignPage({ d, active }: { d: Design; active: boolean }) {
   );
 }
 
-function RequirementsStep({ d }: { d: Design }) {
+function FunctionalStep({ d }: { d: Design }) {
+  if (!d.functional.length) return <p className="soft">The RFC lists no functional requirements.</p>;
   return (
     <>
       <div className="sub">
-        <h3>
-          Functional <span className="count">{d.functional.length}</span>
-        </h3>
         <div className="tablewrap">
           <table>
             <tbody>
@@ -541,11 +550,16 @@ function RequirementsStep({ d }: { d: Design }) {
           </table>
         </div>
       </div>
-      {d.nonFunctional.length > 0 && (
+      <More label="Out of scope" meta={count(d.outOfScope)} blocks={d.outOfScope} />
+    </>
+  );
+}
+
+function NonFunctionalStep({ d }: { d: Design }) {
+  return (
+    <>
+      {d.nonFunctional.length > 0 ? (
         <div className="sub">
-          <h3>
-            Non-functional <span className="count">{d.nonFunctional.length}</span>
-          </h3>
           <div className="nfrs">
             {d.nonFunctional.map((r) => (
               <details key={r.id}>
@@ -561,9 +575,10 @@ function RequirementsStep({ d }: { d: Design }) {
             ))}
           </div>
         </div>
+      ) : (
+        <p className="soft">The RFC lists no non-functional requirements.</p>
       )}
       <More label="Capacity estimates" meta={count(d.estimates)} blocks={d.estimates} />
-      <More label="Out of scope" meta={count(d.outOfScope)} blocks={d.outOfScope} />
     </>
   );
 }
@@ -642,10 +657,11 @@ function FlowStep({ d }: { d: Design }) {
   );
 }
 
+/** The overview's prose, and each component in one sentence; step 8 has the rest. */
 function HighLevelStep({ d }: { d: Design }) {
   return (
     <>
-      {d.overview ? <Blocks blocks={d.overview.blocks} /> : <p className="soft">The RFC has no overview.</p>}
+      {d.overview?.blocks.length ? <Blocks blocks={d.overview.blocks} /> : <p className="soft">The RFC has no overview.</p>}
       {d.components.length > 0 && (
         <div className="cards">
           {d.components.map((s) => (
@@ -659,8 +675,7 @@ function HighLevelStep({ d }: { d: Design }) {
 
 function Component({ s }: { s: Section }) {
   const lead = s.blocks.find((b) => b.kind === "p");
-  const { head, tail } = lead && lead.kind === "p" ? firstSentence(lead.text) : { head: "", tail: "" };
-  const rest: Block[] = [...(tail ? [{ kind: "p", text: tail } as Block] : []), ...s.blocks.filter((b) => b !== lead)];
+  const head = lead && lead.kind === "p" ? firstSentence(lead.text).head : "";
   return (
     <div className="comp">
       <h3>{s.title}</h3>
@@ -669,8 +684,27 @@ function Component({ s }: { s: Section }) {
           <Text text={head} />
         </p>
       )}
-      <More label="More" blocks={rest} />
     </div>
+  );
+}
+
+/** Each component in full, with its type sketches up front, then the decisions and failure modes. */
+function LowLevelStep({ d }: { d: Design }) {
+  return (
+    <>
+      {d.components.map((s) => (
+        <div className="sub" key={s.title}>
+          <h3>{s.title}</h3>
+          <Outline s={s} keep={(b) => b.kind === "code" || b.kind === "pc"} more="Details" />
+        </div>
+      ))}
+      {(d.decisions.length > 0 || d.failureModes.length > 0) && (
+        <div className="sub">
+          <h3>Deep dives</h3>
+          <DivesStep d={d} />
+        </div>
+      )}
+    </>
   );
 }
 

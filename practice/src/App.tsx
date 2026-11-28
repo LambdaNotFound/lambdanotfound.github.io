@@ -18,9 +18,12 @@ import {
   DIFFICULTY_NAME,
   GRADES,
   byCategory,
+  commentRequest,
   daysBetween,
+  findDailyIssue,
   formatDate,
   inkAlpha,
+  issueListRequest,
   logIssueError,
   logIssueRequest,
   logIssueUrl,
@@ -32,6 +35,7 @@ import {
   slipLines,
   sourceUrl,
   type Card,
+  type DailyIssue,
   type Grade,
   type LogEntry,
   type Problem,
@@ -333,7 +337,7 @@ function Page({ data, footer }: { data: Loaded; footer: ReactNode }) {
               ))}
             </ul>
           </div>
-          <Slip date={today} lines={pending} onSend={() => dispatch({ type: "send" })} />
+          <Slip date={today} planDate={planDate} lines={pending} onSend={() => dispatch({ type: "send" })} />
         </section>
       )}
 
@@ -414,6 +418,11 @@ function Item({ problem: p, card, isNew, logged, sent, grade, solutions, today, 
               My solution
             </a>
           )}
+          {sent && !logged && (
+            // For a comment never posted, or a grade to change: GoCode keeps
+            // the last log of a problem on a day.
+            <button onClick={() => dispatch({ type: "unsend", id: p.id })}>Grade again</button>
+          )}
         </div>
         {showCode && <Code id={panel} refs={refs} />}
         {logged ? (
@@ -422,10 +431,7 @@ function Item({ problem: p, card, isNew, logged, sent, grade, solutions, today, 
           </p>
         ) : sent ? (
           <p className="status">
-            Sent as <b className={sent}>{sent}</b>. It shows as logged a few minutes after the issue is submitted.{" "}
-            <button className="linkbtn" onClick={() => dispatch({ type: "unsend", id: p.id })}>
-              Grade again
-            </button>
+            Sent as <b className={sent}>{sent}</b>. It shows as logged a few minutes after it reaches GitHub.
           </p>
         ) : (
           <div className="row" role="group" aria-label={`Grade ${p.title}`}>
@@ -509,25 +515,74 @@ function Code({ id, refs }: { id: string; refs: SourceRef[] }) {
   );
 }
 
-function Slip({ date, lines, onSend }: { date: string; lines: string[]; onSend: () => void }) {
+/**
+ * Copies text inside the click that asked for it, before the GitHub tab takes
+ * focus: the async clipboard API can be refused once the page is in the
+ * background, and this older way finishes before the click handler returns.
+ */
+function copyNow(text: string): boolean {
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.setAttribute("readonly", "");
+  ta.style.position = "fixed";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  ta.select();
+  ta.setSelectionRange(0, text.length);
+  let ok = false;
+  try {
+    ok = document.execCommand("copy");
+  } catch {
+    ok = false;
+  }
+  ta.remove();
+  return ok;
+}
+
+/** The plan's "Daily Practice" issue, looked up once per plan; null while unknown or missing. */
+function useDailyIssue(planDate: string, token: string): DailyIssue | null {
+  const [found, setFound] = useState<{ date: string; issue: DailyIssue | null } | null>(null);
+  useEffect(() => {
+    let live = true;
+    const { url, init } = issueListRequest(token);
+    fetch(url, init)
+      .then((r) => (r.ok ? r.json() : null))
+      .then(
+        (list: unknown) => live && setFound({ date: planDate, issue: findDailyIssue(list, planDate) }),
+        () => live && setFound({ date: planDate, issue: null }),
+      );
+    return () => {
+      live = false;
+    };
+  }, [planDate, token]);
+  return found?.date === planDate ? found.issue : null;
+}
+
+function Slip({ date, planDate, lines, onSend }: { date: string; planDate: string; lines: string[]; onSend: () => void }) {
   const [note, setNote] = useState("");
   const [token, setToken] = useState(loadToken);
   const [busy, setBusy] = useState(false);
+  const issue = useDailyIssue(planDate, token);
   const text = lines.join("\n");
-  // With a saved token: create the log issue directly, no GitHub form.
+  // With a saved token: comment on the plan's issue directly, or, without
+  // one found, create a log issue.
   const logNow = async () => {
     if (!text || busy) return;
     setBusy(true);
-    const { url, init } = logIssueRequest(date, text, token);
+    const { url, init } = issue ? commentRequest(issue, text, token) : logIssueRequest(date, text, token);
     try {
       const res = await fetch(url, init);
       if (!res.ok) {
         setNote(logIssueError(res.status));
         return;
       }
-      const issue = (await res.json()) as { number?: number };
+      const made = (await res.json()) as { number?: number };
       onSend();
-      setNote(`Sent as issue #${issue.number ?? "?"}. These show as logged here a few minutes after GitHub runs it.`);
+      setNote(
+        issue
+          ? `Commented on #${issue.number}. These show as logged here a few minutes after GitHub runs it.`
+          : `Sent as issue #${made.number ?? "?"}. These show as logged here a few minutes after GitHub runs it.`,
+      );
     } catch {
       setNote("Couldn't reach GitHub. Use Log on GitHub instead.");
     } finally {
@@ -547,6 +602,7 @@ function Slip({ date, lines, onSend }: { date: string; lines: string[]; onSend: 
       setNote("Could not copy. Select the lines above and copy them.");
     }
   };
+  const pasteNote = (n: number) => `Copied. Paste the lines as a comment on #${n} and press Comment.`;
   return (
     <aside className="slip" aria-label="Log">
       <h2>Log</h2>
@@ -559,7 +615,7 @@ function Slip({ date, lines, onSend }: { date: string; lines: string[]; onSend: 
       {/* Always the same <a>, so the click that sends it is never on an element React just replaced. */}
       <a
         className={token ? "btn" : "btn send"}
-        href={text ? logIssueUrl(date, text) : undefined}
+        href={text ? (issue ? issue.url : logIssueUrl(date, text)) : undefined}
         aria-disabled={!text}
         target="_blank"
         rel="noopener noreferrer"
@@ -569,8 +625,22 @@ function Slip({ date, lines, onSend }: { date: string; lines: string[]; onSend: 
           // re-renders before the click handler returns, and the browser
           // follows the link only after that, by which time there is no href
           // left to follow. Waiting one task lets the GitHub tab open first.
-          setTimeout(onSend, 0);
-          setNote("Opened on GitHub. Submit the issue there to log these.");
+          if (!issue) {
+            setTimeout(onSend, 0);
+            setNote("Opened on GitHub. Submit the issue there to log these.");
+          } else if (copyNow(text)) {
+            setTimeout(onSend, 0);
+            setNote(pasteNote(issue.number));
+          } else {
+            // The lines stay on the slip until they are copied.
+            navigator.clipboard.writeText(text).then(
+              () => {
+                onSend();
+                setNote(pasteNote(issue.number));
+              },
+              () => setNote(`Couldn't copy. Copy the lines above and paste them as a comment on #${issue.number}.`),
+            );
+          }
         }}
       >
         Log on GitHub
@@ -580,9 +650,13 @@ function Slip({ date, lines, onSend }: { date: string; lines: string[]; onSend: 
       </button>
       <p className="small soft">
         {note ||
-          (token
-            ? "Log now creates the issue for you. Log on GitHub opens it for you to check and submit."
-            : "Opens a new GitHub issue with these lines filled in. Submit it, and they show as logged here a few minutes later.")}
+          (issue
+            ? token
+              ? `Log now comments on #${issue.number}, the plan's issue, for you. Log on GitHub copies the lines and opens #${issue.number} for you to paste them.`
+              : `Copies these lines and opens #${issue.number}, the plan's issue. Paste them as a comment, and they show as logged here a few minutes later.`
+            : token
+              ? "Log now creates a log issue for you. Log on GitHub opens it for you to check and submit."
+              : "Opens a new GitHub issue with these lines filled in. Submit it, and they show as logged here a few minutes later.")}
       </p>
       <TokenSetup token={token} onSave={keep} />
     </aside>

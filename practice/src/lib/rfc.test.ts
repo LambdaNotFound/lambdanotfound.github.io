@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { absoluteLinks, firstSentence, inline, parseBlocks, parseRfc, parseTables, slugOf, splitFlip } from "./rfc";
+import { absoluteLinks, firstSentence, inline, parseBlocks, parseRfc, parseTables, slugOf, splitArchitecture, splitFlip } from "./rfc";
 
 // A small RFC in the shape system-design's rfc-spec.md fixes, wrapped the
 // way its exemplar wraps lines.
@@ -183,6 +183,11 @@ describe("parseRfc", () => {
     expect(d.entities?.blocks.at(-1)).toEqual({ kind: "pc", pro: "one table.", con: "a big index." });
   });
 
+  it("takes the architecture drawing out of the overview", () => {
+    expect(d.architecture).toEqual([{ kind: "mermaid", text: "flowchart LR\n  a --> b" }]);
+    expect(d.overview?.blocks.map((b) => b.kind)).toEqual(["p"]);
+  });
+
   it("turns the schema sketch into a table with its keys", () => {
     expect(d.tables).toEqual([
       {
@@ -319,5 +324,29 @@ describe("firstSentence and slugOf", () => {
 
   it("finds the slug in a glob path", () => {
     expect(slugOf("../../designs-src/design-doc/url-shortener/rfc.md")).toBe("url-shortener");
+  });
+});
+
+describe("splitArchitecture", () => {
+  const p = (text: string) => ({ kind: "p" as const, text });
+  const legend = { kind: "list" as const, ordered: false, items: ["**Blue:** create."] };
+
+  it("takes a flowchart with its lead-in and legend, and leaves sequences", () => {
+    const flow = { kind: "mermaid" as const, text: "flowchart TB\n  a --> b" };
+    const seq = { kind: "mermaid" as const, text: "sequenceDiagram\n  A->>B: hi" };
+    const { architecture, rest } = splitArchitecture([p("One service."), p("Requests take these paths:"), flow, legend, seq, p("After.")]);
+    expect(architecture).toEqual([p("Requests take these paths:"), flow, legend]);
+    expect(rest).toEqual([p("One service."), seq, p("After.")]);
+  });
+
+  it("takes an embedded drawing or the brief that stands in for one", () => {
+    const img = p("![Architecture](https://example.com/a.svg)");
+    const brief = p("*Diagram: the service, the store, and the arrows between them.*");
+    expect(splitArchitecture([p("Intro:"), img, legend]).architecture).toEqual([img, legend]);
+    expect(splitArchitecture([brief]).architecture).toEqual([brief]);
+  });
+
+  it("leaves an overview with no drawing alone", () => {
+    expect(splitArchitecture([p("Just prose.")])).toEqual({ architecture: [], rest: [p("Just prose.")] });
   });
 });
